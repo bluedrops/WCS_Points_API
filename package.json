@@ -1,10 +1,9 @@
 {
-  "name": "mp3_starter_17",
+  "name": "WCS API",
   "version": "1.0.0",
-  "description": "MP3 Starter for CS498RK Fall 2017",
+  "description": "WCS API",
   "authors": [
-    "James Lee <jwlee11@illinois.edu>",
-    "Sujay Khandekar <khandek2@illinois.edu>"
+    "Simon Lu <shlu2@illinois.edu>"
   ],
   "scripts": {
     "start": "nodemon --exec node server.js"
