@@ -79,15 +79,55 @@ module.exports = function (router) {
       });
     })
 
-    //
-    //
-    // Event.findOne({ _id: req.params.id }, function (err, event) {
-    //   if (err || !event) return res.status(404).json({ message: 'Event not found', data: [] });
-    //   res.json({ message: 'OK', data: event });
-    // })
   })
 
   var userRoute = router.route('/users/:id');
+
+  userRoute.put(function (req, res) {
+    var type = req.body.type;
+    var date = req.body.date;
+    var netid = req.params.id;
+
+    var targetUser;
+
+    User.findOne({
+      netid: req.params.id
+    }, function(err, user) {
+
+      if (err) {
+        return res.status(500);
+      }
+
+      if (!user) {
+        // Create a user if they don't exist
+        var newUser = new User({
+          netid: req.params.id,
+          office_hours: [],
+          committees: []
+        });
+
+        newUser.save(function (err) {
+          if (err) return res.status(500).json({ message: 'Error with creating the user', data: [] });
+        });
+
+        targetUser = newUser;
+      } else {
+        targetUser = user;
+      }
+      // Update userstats w/ committee & oh pts
+
+      if (type === 'committee') {
+        targetUser.committees.push(date)
+      } else if (type === 'office_hours'){
+        targetUser.office_hours.push(date);
+      }
+
+      targetUser.save(function (err) {
+        if (err) return res.status(500).json({ message: 'Error with updating the user', data: [] });
+        res.json({ message: 'OK', data: targetUser });
+      })
+    });
+  });
 
   userRoute.get(function (req, res) {
 
