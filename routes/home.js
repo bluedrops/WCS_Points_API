@@ -1,88 +1,149 @@
 var secrets = require('../config/secrets');
 
 var Event = require('../models/event');
+var User = require('../models/user');
 
 module.exports = function (router) {
 
-    var homeRoute = router.route('/');
+  var homeRoute = router.route('/');
 
-    homeRoute.get(function (req, res) {
-      var connectionString = secrets.token;
-      res.json({ message: 'My connection string is ' + connectionString });
+  homeRoute.get(function (req, res) {
+    var connectionString = secrets.token;
+    res.json({ message: 'My connection string is ' + connectionString });
+  });
+
+  var eventsRoute = router.route('/events');
+
+  eventsRoute.get(function (req, res) {
+    var query = Event.find({});
+
+    query.exec(function (err, events) {
+      if (err) return res.status(500);
+      res.json({ message: 'OK', data: events });
+    })
+  });
+
+  eventsRoute.post(function (req, res) {
+    var errMsg = '';
+
+    if (!req.body.name) {
+      errMsg += 'An event name is required! ';
+    }
+
+    if (!req.body.points) {
+      errMsg += 'A point value for the event is required! ';
+    }
+
+    if (!req.body.date) {
+      errMsg += 'A date for the event is required! '
+    }
+
+    if (errMsg) {
+      errMsg = 'Validation error(s): ' + errMsg;
+      console.log(errMsg);
+      return res.status(500).json({ message: errMsg, data: [] });
+    }
+
+    console.log(req.body);
+
+    var newEvent = new Event({
+      name: req.body.name,
+      date: req.body.date,
+      points: req.body.points
     });
 
-    var eventsRoute = router.route('/events');
-
-    eventsRoute.get(function (req, res) {
-      var query = Event.find({});
-
-      query.exec(function (err, events) {
-        if (err) return res.status(500);
-        res.json({ message: 'OK', data: events });
-      })
+    newEvent.save(function (err) {
+      if (err) return res.status(500).json({ message: 'Error with creating the event', data: [] });
+      res.status(201).json({ message: 'Event created!', data: newEvent });
     });
+  })
 
-    eventsRoute.post(function (req, res) {
-      var errMsg = '';
+  var eventIdRoute = router.route('/events/:id');
 
-      if (!req.body.name) {
-        errMsg += 'An event name is required! ';
-      }
+  eventIdRoute.get(function (req, res) {
+    Event.findOne({ _id: req.params.id }, function (err, event) {
+      if (err || !event) return res.status(404).json({ message: 'Event not found', data: [] });
+      res.json({ message: 'OK', data: event });
+    })
+  });
 
-      if (!req.body.points) {
-        errMsg += 'A point value for the event is required! ';
-      }
+  eventIdRoute.put(function (req, res) {
+    const netid = req.body.netid;
 
-      if (!req.body.date) {
-        errMsg += 'A date for the event is required! '
-      }
-
-      if (errMsg) {
-        errMsg = 'Validation error(s): ' + err;
-        return res.status(500).json({ message: errMsg, data: [] });
-      }
-
-      var newEvent = new Event({
-        name: req.body.name,
-        date: req.body.date,
-        points: req.body.points
-      });
-
-      newEvent.save(function (err) {
-        if (err) return res.status(500).json({ message: 'Error with creating the event', data: [] });
-        res.status(201).json({ message: 'Event created!', data: newEvent });
+    Event.findOne({ _id: req.params.id }, function (err, event) {
+      if (err || !event) return res.status(404).json({ message: 'Event not found', data: [] });
+      event.attendees.push(netid);
+      event.save(function (err) {
+        if (err) return res.status(500).json({ message: 'Error with updating the event', data: [] });
+        res.status(201).json({ message: 'Event updated!', data: event });
       });
     })
 
-    var eventIdRoute = router.route('/events/:id');
+    //
+    //
+    // Event.findOne({ _id: req.params.id }, function (err, event) {
+    //   if (err || !event) return res.status(404).json({ message: 'Event not found', data: [] });
+    //   res.json({ message: 'OK', data: event });
+    // })
+  })
 
-    eventIdRoute.get(function (req, res) {
-        Event.findOne({ _id: req.params.id }, function (err, event) {
-            if (err || !event) return res.status(404).json({ message: 'Event not found', data: [] });
-            res.json({ message: 'OK', data: event });
-        })
+  var userRoute = router.route('/users/:id');
+
+  userRoute.get(function (req, res) {
+
+    var userStats = {
+      'attended_events': [],
+      'committees': [],
+      'office_hours': []
+    };
+
+    var targetUser;
+
+    User.findOne({
+      netid: req.params.id
+    }, function(err, user) {
+
+      if (err) {
+        return res.status(500);
+      }
+
+      if (!user) {
+        // Create a user if they don't exist
+        var newUser = new User({
+          netid: req.params.id,
+          office_hours: [],
+          committees: []
+        });
+
+        newUser.save(function (err) {
+          if (err) return res.status(500).json({ message: 'Error with creating the user', data: [] });
+        });
+
+        targetUser = newUser;
+      } else {
+        targetUser = user;
+      }
+
+      // Update userstats w/ committee & oh pts
+      userStats.committees = targetUser.committees;
+      userStats.office_hours = targetUser.office_hours;
     });
 
-    var netIdRoute = router.route('/users/:id');
+    // Totals up points for User
+    var query = Event.find({});
+    query.exec(function (err, events) {
+      if (err) return res.status(500);
 
-    netIdRoute.get(function (req, res) {
-      var query = Event.find({});
-      query.exec(function (err, events) {
-        if (err) return res.status(500);
-
-        var total_pts = 0;
-        var attended_events = [];
-
-        events.forEach(function (event) {
-          if(event.attendees.includes(req.params.id)) {
-            total_pts += event.points;
-            attended_events.push(event);
-          }
-        })
-
-        res.json({ message: 'Total number of points for ' + req.params.id + ': ' + total_pts, data: attended_events })
+      events.forEach(function (event) {
+        if(event.attendees.includes(req.params.id)) {
+          userStats.attended_events.push(event);
+        }
       })
-    });
 
-    return router;
+      // res.json({ message: 'Total number of points for ' + req.params.id + ': ' + total_pts, data: attended_events })
+      res.json({ message: 'OK', data: userStats });
+    })
+  });
+
+  return router;
 }
